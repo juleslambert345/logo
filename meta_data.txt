@@ -1,0 +1,5 @@
+{
+    "version":"0.1",
+    "description":"this is a model that return a number of logos",
+    "input":"number of logos return"
+}
