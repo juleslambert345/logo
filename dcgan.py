@@ -22,6 +22,7 @@ import pickle
 import mlflow
 import mlflow.pytorch
 from datetime import datetime
+from train_encoder import train_encoder
 
 
 from PIL import Image
@@ -30,7 +31,8 @@ from torch.utils.data import Dataset
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_epochs", type=int, default=1, help="number of epochs of training")
+parser.add_argument("--n_epochs", type=int, default=500, help="number of epochs of training the gan")
+parser.add_argument("--n_epochs_encoder", type=int, default=100, help="number of epochs of training the encoder")
 parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
 parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
 parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
@@ -40,7 +42,13 @@ parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality 
 parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
 parser.add_argument("--channels", type=int, default=3, help="number of image channels")
 parser.add_argument("--sample_interval", type=int, default=400, help="interval between image sampling")
-parser.add_argument("--experiment_name", type=str, default='test3', help="name of folder where we save the experiment")
+parser.add_argument("--experiment_name", type=str, default='testing', help="name of folder where we save the experiment")
+parser.add_argument("--generator_scale", type=int, default=16, help="scale of which we multiply the number of channel in the generator")
+parser.add_argument("--discriminator_scale", type=int, default=16, help="scale of which we multiply the number of channel in the discriminator")
+parser.add_argument("--encoder_scale", type=int, default=16, help="scale of which we multiply the number of channel in the discriminator")
+
+
+
 opt = parser.parse_args()
 print(opt)
 
@@ -82,7 +90,7 @@ def save_loss_plot(batches_list, generative_loss_list, discriminative_loss_list,
     plt.scatter(batches_list, generative_loss_list, label="generative loss")
     plt.scatter(batches_list, discriminative_loss_list, label="discriminative loss")
     plt.legend(loc="upper left")
-    plt.xlabel('epoch')
+    plt.xlabel('batch')
     plt.ylabel('loss')
     plt.savefig(join(experiment_path, 'loss.png'))
     plt.close()
@@ -95,6 +103,7 @@ def save_model_info(discriminator, generator, experiment_path, gen_imgs, batches
                             'discriminative loss': discriminative_loss_list})
     loss_df.to_csv(join(experiment_path, 'loss.csv'))
     save_loss_plot(batches_list, generative_loss_list, discriminative_loss_list, experiment_path)
+    save_interpolation(25, generator, join(experiment_path, 'images'), "%d_interpolation.png" % batches_done)
 
 
 def train_generator(imgs,  generator, discriminator, adversarial_loss, optimizer_G, opt):
@@ -133,6 +142,42 @@ def train_discriminator(real_imgs, gen_imgs, discriminator, adversarial_loss, op
     optimizer_D.step()
     return d_loss
 
+def create_interpolation(nb_logo, generator):
+    # Sample noise as generator input
+    z_to_interpolate = Variable(Tensor(np.random.normal(0, 1, (2, opt.latent_dim))))
+    z_values = Variable(Tensor(nb_logo, opt.latent_dim).fill_(1.0), requires_grad=False)
+    for i in range(nb_logo):
+        ratio = i/(nb_logo-1)
+        z_values[i]= (1-ratio)*z_to_interpolate[0]+ratio*z_to_interpolate[1]
+    gen_imgs = generator(z_values)
+    return gen_imgs
+
+
+def save_interpolation(nb_logo, generator, path, name_file = None):
+    if name_file is None:
+        name_file = "interpolation_logo.png"
+    generated_images = create_interpolation(nb_logo, generator)
+    save_image(generated_images.data, join(path, name_file), nrow=5, normalize=True)
+
+
+def calculate_encoding(dataloader, encoder, path_experiment):
+
+    list_encoding = []
+    list_filename = []
+
+    for i, data in enumerate(dataloader):
+        imgs, filename = data
+        real_imgs = Variable(imgs.type(Tensor))
+        list_encoding.append(encoder(real_imgs).data.cpu().numpy())
+        list_filename+=list(filename)
+
+    encoding = np.concatenate( list_encoding, axis=0 )
+
+
+    df = pd.DataFrame(encoding, index = list_filename)
+    df.to_csv(join(path_experiment, 'encoding_training_data.csv'))
+
+
 def save_ml_flow(path_save_experiment, name_experiement, path_experiement_files):
     '''
 
@@ -152,10 +197,14 @@ def save_ml_flow(path_save_experiment, name_experiement, path_experiement_files)
     artifacts = {
         "generator_dict": 'file//'+join(cwd, path_experiement_files, 'G.pth').replace('\\', '/'), #mlflow seem to have some difficulty with path in windows this correction make it work
         "discriminator_dict": 'file//' + join(cwd, path_experiement_files, 'D.pth').replace('\\', '/'),
+        "encoder_dict": 'file//' + join(cwd, path_experiement_files, 'E.pth').replace('\\', '/'),
         "opt": 'file//'+join(cwd, path_experiement_files, 'opt.pkl').replace('\\', '/'),
         "loss_image": 'file//' + join(cwd, path_experiement_files, 'loss.png').replace('\\', '/'),
         "loss_csv": 'file//' + join(cwd, path_experiement_files, 'loss.csv').replace('\\', '/'),
-        "generated_logo": 'file//' + join(cwd, path_experiement_files, 'generated_logo.png').replace('\\', '/')
+        "generated_logo": 'file//' + join(cwd, path_experiement_files, 'generated_logo.png').replace('\\', '/'),
+        "interpolation_logo": 'file//' + join(cwd, path_experiement_files, 'interpolation_logo.png').replace('\\', '/'),
+        "encoding_logo": 'file//' + join(cwd, path_experiement_files, 'encoding_image.png').replace('\\', '/'),
+        "encoding_data": 'file//' + join(cwd, path_experiement_files, 'encoding_training_data.csv').replace('\\', '/')
     }
 
     conda_env = mlflow.pytorch.get_default_conda_env()
@@ -166,9 +215,6 @@ def save_ml_flow(path_save_experiment, name_experiement, path_experiement_files)
                              conda_env=conda_env,
                              code_path=['dcgan_model.py', 'meta_data.txt']
                              )
-
-
-    #mlflow.pytorch.save_model(generator, save_folder, conda_env=conda_env)
 
 
 if __name__ == "__main__":
@@ -207,8 +253,9 @@ if __name__ == "__main__":
     batches_list = []
 
     for epoch in range(opt.n_epochs):
-        for i, imgs in enumerate(dataloader):
+        for i, data in enumerate(dataloader):
 
+            imgs, _ = data
             # Configure input
             real_imgs = Variable(imgs.type(Tensor))
 
@@ -233,5 +280,9 @@ if __name__ == "__main__":
     torch.save(discriminator.state_dict(), join(experiment_path, 'D.pth'))
     torch.save(generator.state_dict(), join(experiment_path, 'G.pth'))
     save_image(gen_imgs.data[:25], join(experiment_path, "generated_logo.png"), nrow=5, normalize=True)
+    save_interpolation(25, generator, experiment_path)
+
+    encoder = train_encoder(opt, generator, experiment_path)
+    calculate_encoding(dataloader, encoder, experiment_path)
 
     save_ml_flow('experiments_result', opt.experiment_name, experiment_path)

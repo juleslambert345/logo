@@ -4,7 +4,7 @@ import pandas as pd
 import json
 from os.path import join
 
-experiment_path = join('experiements_result', '2020_05_31__10_48_test3')
+experiment_path = join('experiments_result', '2020_05_31__19_53_test3')
 
 # Name of the apps module package
 app = Flask(__name__)
@@ -31,6 +31,7 @@ def predict():
     # Log the request
     print({'request': req})
 
+
     # Format the request data in a DataFrame
     nb_logo = req['nb_logo']
 
@@ -43,4 +44,4 @@ def predict():
     # Return prediction as reponse
     return jsonify(pred)
 
-app.run( debug = True)
+app.run(  debug=True)
