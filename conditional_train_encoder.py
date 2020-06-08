@@ -1,6 +1,10 @@
-from dcgan_model import Encoder
+'''
+same as train encoder but for conditional encoder
+'''
+
+from conditional_dcgan_model import Encoder
 import torch
-from dcgan_dataset import SimpleDataset
+from dcgan_dataset import LabelDataset
 from os.path import join
 import torch.nn as nn
 from torchvision.utils import save_image
@@ -9,14 +13,14 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import pandas as pd
 
-def get_dataloader(opt):
+def get_dataloader(opt, label_encoder):
 
     transformation = transforms.Compose(
         [transforms.Resize(opt.img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
     )
 
-    train_logo = SimpleDataset(join('data', 'cluster', str(opt.cluster)), transformation, split = 'train')
-    valid_logo = SimpleDataset(join('data', 'cluster', str(opt.cluster)), transformation, split = 'valid')
+    train_logo = LabelDataset(join('data', 'cluster'), transformation, split = 'train', encoder = label_encoder)
+    valid_logo = LabelDataset(join('data', 'cluster'), transformation, split = 'valid', encoder = label_encoder)
 
     train_dataloader = torch.utils.data.DataLoader(
             train_logo,
@@ -41,11 +45,11 @@ def save_loss_plot(batches_list, train_loss_list, valid_loss_list, experiment_pa
     plt.savefig(join(experiment_path, 'loss_encoder.png'))
     plt.close()
 
-def train_encoder(opt, generator, experiment_path):
+def train_encoder(opt, generator, experiment_path, label_encoder):
     generator.eval()
     cuda = True if torch.cuda.is_available() else False
 
-    train_logo, valid_logo, train_dataloader, valid_dataloader = get_dataloader(opt)
+    train_logo, valid_logo, train_dataloader, valid_dataloader = get_dataloader(opt, label_encoder)
 
     nb_train_element = train_logo.__len__()
     nb_valid_element = valid_logo.__len__()
@@ -70,11 +74,12 @@ def train_encoder(opt, generator, experiment_path):
     for epoch in range(opt.n_epochs_encoder):
         loss_calculation = 0
         for i, data in enumerate(train_dataloader):
-            imgs, _ = data
+            imgs, _, labels, _ = data
             real_imgs = Variable(imgs.type(Tensor))
+            labels_vector = Variable(labels.type(Tensor))
             batch_size = imgs.shape[0]
-            z = encoder(real_imgs)
-            new_imgs = generator(z)
+            z, labels_vector = encoder(real_imgs)
+            new_imgs = generator(z, labels_vector)
 
             encoder_loss = L2_loss(new_imgs, real_imgs)
 
@@ -89,11 +94,12 @@ def train_encoder(opt, generator, experiment_path):
         train_loss_list.append(loss_calculation)
         loss_calculation=0
         for i, data in enumerate(valid_dataloader):
-            imgs, _ = data
+            imgs, _, labels, _ = data
             real_imgs = Variable(imgs.type(Tensor))
+            labels_vector = Variable(labels.type(Tensor))
             batch_size = imgs.shape[0]
-            z = encoder(real_imgs)
-            new_imgs = generator(z)
+            z, labels_vector = encoder(real_imgs)
+            new_imgs = generator(z, labels_vector)
 
             encoder_loss = L2_loss(new_imgs, real_imgs)
 

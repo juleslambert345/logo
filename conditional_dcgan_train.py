@@ -14,7 +14,7 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-from dcgan_model import weights_init_normal, Generator, Discriminator, GeneratorWrapper
+from conditional_dcgan_model import weights_init_normal, Generator, Discriminator, GeneratorWrapper
 from dcgan_dataset import SimpleDataset, LabelDataset
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -22,7 +22,7 @@ import pickle
 import mlflow
 import mlflow.pytorch
 from datetime import datetime
-from train_encoder import train_encoder
+from conditional_train_encoder import train_encoder
 from PIL import ImageFilter
 
 
@@ -32,8 +32,8 @@ from torch.utils.data import Dataset
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_epochs", type=int, default=500, help="number of epochs of training the gan")
-parser.add_argument("--n_epochs_encoder", type=int, default=100, help="number of epochs of training the encoder")
+parser.add_argument("--n_epochs", type=int, default=50, help="number of epochs of training the gan")
+parser.add_argument("--n_epochs_encoder", type=int, default=5, help="number of epochs of training the encoder")
 parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
 parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
 parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
@@ -43,11 +43,11 @@ parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality 
 parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
 parser.add_argument("--channels", type=int, default=3, help="number of image channels")
 parser.add_argument("--sample_interval", type=int, default=400, help="interval between image sampling")
-parser.add_argument("--experiment_name", type=str, default='cluster5V3', help="name of folder where we save the experiment")
+parser.add_argument("--experiment_name", type=str, default='conditional_gan', help="name of folder where we save the experiment")
 parser.add_argument("--generator_scale", type=int, default=16, help="scale of which we multiply the number of channel in the generator")
 parser.add_argument("--discriminator_scale", type=int, default=16, help="scale of which we multiply the number of channel in the discriminator")
 parser.add_argument("--encoder_scale", type=int, default=16, help="scale of which we multiply the number of channel in the discriminator")
-parser.add_argument("--cluster", type=int, default=5, help="scale of which we multiply the number of channel in the discriminator")
+parser.add_argument("--nb_label", type=int, default=32, help="number of cluster labels that will be used")
 
 
 
@@ -137,7 +137,7 @@ def save_model_info(discriminator, generator, experiment_path, gen_imgs, batches
     save_interpolation(25, generator, join(experiment_path, 'images'), "%d_interpolation.png" % batches_done)
 
 
-def train_generator(imgs,  generator, discriminator, adversarial_loss, optimizer_G, opt):
+def train_generator(imgs, labels_vector,  generator, discriminator, adversarial_loss, optimizer_G, opt):
 
     valid = Variable(Tensor(imgs.shape[0], 1).fill_(1.0), requires_grad=False)
 
@@ -147,10 +147,10 @@ def train_generator(imgs,  generator, discriminator, adversarial_loss, optimizer
     z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
 
     # Generate a batch of images
-    gen_imgs = generator(z)
+    gen_imgs = generator(z, labels_vector)
 
     # Loss measures generator's ability to fool the discriminator
-    g_loss = adversarial_loss(discriminator(gen_imgs), valid)
+    g_loss = adversarial_loss(discriminator(gen_imgs, labels_vector), valid)
 
     g_loss.backward()
     optimizer_G.step()
@@ -158,15 +158,15 @@ def train_generator(imgs,  generator, discriminator, adversarial_loss, optimizer
     return gen_imgs, g_loss
 
 
-def train_discriminator(real_imgs, gen_imgs, discriminator, adversarial_loss, optimizer_D, g_loss):
+def train_discriminator(real_imgs, gen_imgs, labels_vector, discriminator, adversarial_loss, optimizer_D, g_loss):
     valid = Variable(Tensor(imgs.shape[0], 1).fill_(1.0), requires_grad=False)
     fake = Variable(Tensor(imgs.shape[0], 1).fill_(0.0), requires_grad=False)
 
     optimizer_D.zero_grad()
 
     # Measure discriminator's ability to classify real from generated samples
-    real_loss = adversarial_loss(discriminator(real_imgs), valid)
-    fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
+    real_loss = adversarial_loss(discriminator(real_imgs, labels_vector), valid)
+    fake_loss = adversarial_loss(discriminator(gen_imgs.detach(), labels_vector), fake)
     d_loss = (real_loss + fake_loss) / 2
 
     if g_loss.item()<1.5:
@@ -174,14 +174,25 @@ def train_discriminator(real_imgs, gen_imgs, discriminator, adversarial_loss, op
         optimizer_D.step()
     return d_loss
 
+def create_random_label(opt = opt):
+    nb_labels =opt.nb_label
+    label = np.zeros(nb_labels)
+    label_index = np.random.randint(nb_labels)
+    label[label_index]=1
+    return label
+
 def create_interpolation(nb_logo, generator):
     # Sample noise as generator input
     z_to_interpolate = Variable(Tensor(np.random.normal(0, 1, (2, opt.latent_dim))))
+    label1 = Variable(Tensor(create_random_label(opt)))
+    label2 = Variable(Tensor(create_random_label(opt)))
     z_values = Variable(Tensor(nb_logo, opt.latent_dim).fill_(1.0), requires_grad=False)
+    label_values = Variable(Tensor(nb_logo, opt.nb_label).fill_(1.0), requires_grad=False)
     for i in range(nb_logo):
         ratio = i/(nb_logo-1)
         z_values[i]= (1-ratio)*z_to_interpolate[0]+ratio*z_to_interpolate[1]
-    gen_imgs = generator(z_values)
+        label_values[i] = (1-ratio)*label1+ratio*label2
+    gen_imgs = generator(z_values, label_values)
     return gen_imgs
 
 
@@ -199,7 +210,7 @@ def calculate_encoding(dataloader, encoder, path_experiment):
     encoder.eval()
 
     for i, data in enumerate(dataloader):
-        imgs, filename = data
+        imgs, filename, labels, label_name = data
         real_imgs = Variable(imgs.type(Tensor))
         list_encoding.append(encoder(real_imgs).data.cpu().numpy())
         list_filename+=list(filename)
@@ -238,7 +249,8 @@ def save_ml_flow(path_save_experiment, name_experiement, path_experiement_files)
         "generated_logo": 'file//' + join(cwd, path_experiement_files, 'generated_logo.png').replace('\\', '/'),
         "interpolation_logo": 'file//' + join(cwd, path_experiement_files, 'interpolation_logo.png').replace('\\', '/'),
         "encoding_logo": 'file//' + join(cwd, path_experiement_files, 'encoding_image.png').replace('\\', '/'),
-        "encoding_data": 'file//' + join(cwd, path_experiement_files, 'encoding_training_data.csv').replace('\\', '/')
+        #"encoding_data": 'file//' + join(cwd, path_experiement_files, 'encoding_training_data.csv').replace('\\', '/'),
+        "label_encoder": 'file//' + join(cwd, path_experiement_files, 'label_encoder.pkl').replace('\\', '/')
     }
 
     conda_env = mlflow.pytorch.get_default_conda_env()
@@ -262,9 +274,6 @@ if __name__ == "__main__":
     transformation = transforms.Compose(
                 [transforms.RandomHorizontalFlip(),
                  transforms.RandomGrayscale(p=0.01),
-                 transforms.RandomApply([transforms.Pad(3, fill=255)], p=0.1),
-                 transforms.RandomRotation((1, 359), fill =255),
-                 transforms.RandomPerspective(p=0.01, fill =255),
                  GaussianBlur(2),
                  transforms.Resize(opt.img_size),
                  transforms.ToTensor(),
@@ -273,7 +282,8 @@ if __name__ == "__main__":
                  ]
             )
 
-    dataset_logo = SimpleDataset(join('data', 'cluster', str(opt.cluster)), transformation)
+
+    dataset_logo = LabelDataset(join('data', 'cluster'), transformation)
 
     dataloader = torch.utils.data.DataLoader(
         dataset_logo,
@@ -298,12 +308,13 @@ if __name__ == "__main__":
     for epoch in range(opt.n_epochs):
         for i, data in enumerate(dataloader):
 
-            imgs, _ = data
+            imgs, _, labels, _ = data
             # Configure input
             real_imgs = Variable(imgs.type(Tensor))
+            labels_vector = Variable(labels.type(Tensor))
 
-            gen_imgs, g_loss = train_generator(imgs, generator, discriminator, adversarial_loss, optimizer_G, opt)
-            d_loss = train_discriminator(real_imgs, gen_imgs, discriminator, adversarial_loss, optimizer_D, g_loss)
+            gen_imgs, g_loss = train_generator(imgs, labels_vector,  generator, discriminator, adversarial_loss, optimizer_G, opt)
+            d_loss = train_discriminator(real_imgs, gen_imgs, labels_vector, discriminator, adversarial_loss, optimizer_D, g_loss)
 
             print(
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
@@ -325,7 +336,10 @@ if __name__ == "__main__":
     save_image(gen_imgs.data[:25], join(experiment_path, "generated_logo.png"), nrow=5, normalize=True)
     save_interpolation(25, generator, experiment_path)
 
-    encoder = train_encoder(opt, generator, experiment_path)
-    calculate_encoding(dataloader, encoder, experiment_path)
+    label_encoder = dataset_logo.encoder
+    pickle.dump(label_encoder, open(join(experiment_path, "label_encoder.pkl"), "wb"))
+
+    encoder = train_encoder(opt, generator, experiment_path, label_encoder)
+    #calculate_encoding(dataloader, encoder, experiment_path)
 
     save_ml_flow('experiments_result', opt.experiment_name, experiment_path)

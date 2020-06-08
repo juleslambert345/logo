@@ -1,3 +1,8 @@
+'''
+This is to create model for a basic version of conditional gan
+Essentially copied the model from the dcgan_model.py file and transform into conditional
+'''
+
 # code from https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/dcgan/dcgan.py
 
 import torch.nn as nn
@@ -24,9 +29,10 @@ class Generator(nn.Module):
 
         scale = opt.generator_scale
         self.scale = scale
+        self.nb_label = opt.nb_label
 
         self.init_size = opt.img_size // 4
-        self.l1 = nn.Sequential(nn.Linear(opt.latent_dim, 32*scale * self.init_size ** 2))
+        self.l1 = nn.Sequential(nn.Linear(opt.latent_dim+self.nb_label, 32*scale * self.init_size ** 2))#+100 is for the
 
         self.conv_blocks = nn.Sequential(
             nn.BatchNorm2d(32*scale),
@@ -42,8 +48,9 @@ class Generator(nn.Module):
             nn.Tanh(),
         )
 
-    def forward(self, z):
-        out = self.l1(z)
+    def forward(self, z, labels):
+        out = torch.cat((z, labels), 1)
+        out = self.l1(out)
         out = out.view(out.shape[0], 32*self.scale, self.init_size, self.init_size)
         img = self.conv_blocks(out)
         return img
@@ -64,7 +71,7 @@ class Discriminator(nn.Module):
             return block
 
         self.model = nn.Sequential(
-            *discriminator_block(opt.channels, 4*scale, bn=False),
+            *discriminator_block(opt.channels+1, 4*scale, bn=False),# the +1 is for the label
             *discriminator_block(4*scale, 8*scale),
             *discriminator_block(8*scale, 16*scale),
             *discriminator_block(16*scale, 32*scale),
@@ -74,8 +81,16 @@ class Discriminator(nn.Module):
         ds_size = opt.img_size // 2 ** 4
         self.adv_layer = nn.Sequential(nn.Linear(32*scale * ds_size ** 2, 1), nn.Sigmoid())
 
-    def forward(self, img):
-        out = self.model(img)
+        # label encoding
+        self.nb_label = opt.nb_label
+        self.label_encoding = nn.Sequential(nn.Linear(self.nb_label, 50), nn.LeakyReLU(0.2, inplace=True), nn.Linear(50, 32 *32), nn.LeakyReLU(0.2, inplace=True))
+
+    def forward(self, img, label):
+        batch_size = img.shape[0]
+        label_encoding = self.label_encoding(label)
+        label_encoding = torch.reshape(label_encoding, (batch_size, 1, self.opt.img_size, self.opt.img_size))
+        out = torch.cat((img, label_encoding), 1)
+        out = self.model(out)
         out = out.view(out.shape[0], -1)
         validity = self.adv_layer(out)
 
@@ -105,14 +120,14 @@ class Encoder(nn.Module):
 
         # The height and width of downsampled image
         ds_size = opt.img_size // 2 ** 4
-        self.adv_layer = nn.Linear(32*scale * ds_size ** 2, opt.latent_dim)
+        self.adv_layer = nn.Linear(32*scale * ds_size ** 2, opt.latent_dim+opt.nb_label)
 
     def forward(self, img):
         out = self.model(img)
         out = out.view(out.shape[0], -1)
         validity = self.adv_layer(out)
 
-        return validity
+        return validity[:,:self.opt.latent_dim], validity[:,self.opt.latent_dim:]
 
 
 class GeneratorWrapper(mlflow.pyfunc.PythonModel):
