@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Logogan application</title>
+  </head>
+  <body>
+
+    <h1> Welcome to Logogan </h1>
+    <p> This is a website to create new logo </p>
+    <img src="data:image/png;base64,{{ result_image  }}"\>
+    <form action="/logogan" method="post">
+        <button name="forwardBtn" type="submit">New logo</button>
+    </form>
+  </body>
+</html>
