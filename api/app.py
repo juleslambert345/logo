@@ -16,7 +16,7 @@ app = Flask(__name__, template_folder='web_page_interaction')
 model = mlflow.pyfunc.load_model('./experiments_result/2020_06_05__03_12_cluster_5')
 
 # Load in our meta_data
-f = open("./experiments_result/2020_06_05__03_12_cluster_5/code/meta_data.txt", "r")
+f = open("../experiments_result/2020_06_05__03_12_cluster_5/code/meta_data.txt", "r")
 load_meta_data = json.loads(f.read())
 
 
@@ -55,9 +55,10 @@ def get_image():
 
     file_object = base64.b64encode(file_object.getvalue())
 
+    result_image = file_object
     # Return prediction as response
     # return jsonify(['DONE : Ideally this should be an image'])
-    return file_object
+    #return file_object
 
 
 # Prediction endpoint

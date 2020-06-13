@@ -1,0 +1,1 @@
+This is the folder where the model from mlflow packaging is suppose to be to be used by the api
