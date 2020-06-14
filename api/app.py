@@ -86,7 +86,7 @@ def logogan_starting_page():
         data_dic = {'type_prediction': 'encoding',
                     'img': logo_pillow}
         z = model.predict(data_dic)
-        z += np.random.normal(0, 1, (1, z.shape[1]))
+        z = z +distance*np.random.normal(0, 1, (16, z.shape[1]))
 
         data_dic = {'type_prediction': 'from_vector',
                     'z': z}

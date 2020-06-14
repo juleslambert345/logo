@@ -163,6 +163,9 @@ class GeneratorWrapper(mlflow.pyfunc.PythonModel):
         self.encoder.load_state_dict(torch.load(context.artifacts['encoder_dict'].replace('\\', '/'),
                                                   map_location=lambda storage, loc: storage))
 
+        self.generator.eval()
+        self.encoder.eval()
+
         self.transformation = transforms.Compose(
             [transforms.Resize(self.opt.img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
         )
@@ -172,7 +175,7 @@ class GeneratorWrapper(mlflow.pyfunc.PythonModel):
             self.encoder.cuda()
 
     def latent_vector_interpolation(self, z1, z2, nb_logos):
-        z_to_interpolate = torch.cat((z1, z2), 0)
+        z_to_interpolate = torch.cat((torch.unsqueeze(z1, 0), torch.unsqueeze(z2, 0)), 0)
         Tensor = torch.cuda.FloatTensor if self.cuda else torch.FloatTensor
         z_values = Variable(Tensor(nb_logos, self.opt.latent_dim).fill_(1.0), requires_grad=False)
         for i in range(nb_logos):
