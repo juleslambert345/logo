@@ -1,0 +1,29 @@
+
+To build the docker image
+---
+
+From inside of this directory
+
+Run:
+
+docker build -t logo_api .
+
+
+To run the container locally
+---
+docker run -it --name logo_cont -p 5000:5000 --rm logo_api
+
+
+To tag the image
+---
+docker tag logo_api juleslambert345/logogan:logo_api_v2
+
+
+Push the image
+---
+docker push juleslambert345/logogan:logo_api_v2
+
+
+To run the container on the cloud after having pull image
+---
+docker run -it --name logo_cont -p 5000:5000 --rm juleslambert345/logogan:logo_api_v1

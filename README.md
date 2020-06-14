@@ -23,4 +23,5 @@ When the training is finish is finish, the model is package with mlflow. The app
 
 After the training of the gan, we train an encoder for the gan to learn an encoding to encode an image into the latent space of the gan.
 
+The code for the deployement (mlflow packaging, flask api and dockerfile are mostly inspired by the course material)
 

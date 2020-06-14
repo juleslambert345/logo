@@ -5,7 +5,10 @@ import torch
 from torch.autograd import Variable
 import numpy as np
 import mlflow.pyfunc
-
+import torchvision.transforms as transforms
+import torchvision.utils as vutils
+from PIL import Image
+import io
 
 def weights_init_normal(m):
     classname = m.__class__.__name__
@@ -114,6 +117,27 @@ class Encoder(nn.Module):
 
         return validity
 
+def get_image(image_tensor):
+    '''
+    take an image as tensor and return the image as vytes object
+    '''
+
+    imggrd = vutils.make_grid(image_tensor, padding=2, normalize=True)
+    imgnp = imggrd.numpy()
+    imgnpT = np.transpose(imgnp, (1, 2, 0))
+
+    imgPIL = Image.fromarray((255 * imgnpT).astype("uint8"), 'RGB')
+
+    # create file-object in memory
+    file_object = io.BytesIO()
+
+    # write PNG in file-object
+    imgPIL.save(file_object, 'PNG')
+
+    file_object.seek(0)
+
+    return file_object
+
 
 class GeneratorWrapper(mlflow.pyfunc.PythonModel):
 
@@ -127,24 +151,79 @@ class GeneratorWrapper(mlflow.pyfunc.PythonModel):
         self.cuda = True if torch.cuda.is_available() else False
 
         # Load in and deserialize the label encoder object
-        with open(context.artifacts["opt"], 'rb') as handle:
+        with open(context.artifacts["opt"].replace('\\', '/'), 'rb') as handle:
             self.opt = pickle.load(handle)
 
         # Initialize the model and load in the state dict
-        self.generator =  Generator(self.opt)
-        self.generator.load_state_dict(torch.load(context.artifacts['generator_dict']))
+        self.generator = Generator(self.opt)
+        self.encoder = Encoder(self.opt)
+        self.generator.load_state_dict(torch.load(context.artifacts['generator_dict'].replace('\\', '/'),
+                                                  map_location=lambda storage, loc: storage))
+
+        self.encoder.load_state_dict(torch.load(context.artifacts['encoder_dict'].replace('\\', '/'),
+                                                  map_location=lambda storage, loc: storage))
+
+        self.transformation = transforms.Compose(
+            [transforms.Resize(self.opt.img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
+        )
 
         if self.cuda:
             self.generator.cuda()
+            self.encoder.cuda()
+
+    def latent_vector_interpolation(self, z1, z2, nb_logos):
+        z_to_interpolate = torch.cat((z1, z2), 0)
+        Tensor = torch.cuda.FloatTensor if self.cuda else torch.FloatTensor
+        z_values = Variable(Tensor(nb_logos, self.opt.latent_dim).fill_(1.0), requires_grad=False)
+        for i in range(nb_logos):
+            ratio = i / (nb_logos - 1)
+            z_values[i] = (1 - ratio) * z_to_interpolate[0] + ratio * z_to_interpolate[1]
+        return z_values
+
 
 
     # Create a predict function for our models
-    def predict(self, context, nb_logos):
-        #nb_logo should give the number of logo
+    def predict(self, context, data_dic):
         Tensor = torch.cuda.FloatTensor if self.cuda else torch.FloatTensor
 
-        z = Variable(Tensor(np.random.normal(0, 1, (64, 100))))
-        logos = self.generator(z)
+        if data_dic['type_prediction'] == 'random':
+            #nb_logo should give the number of logo
+            nb_logos = data_dic['nb_logos']
 
-        return logos.cpu().detach()
-
+            z_value = Variable(Tensor(np.random.normal(0, 1, (nb_logos, self.opt.latent_dim))))
+            logos = self.generator(z_value)
+            logos = logos.cpu().detach()
+            logos = get_image(logos)
+            return logos
+        if data_dic['type_prediction'] == 'from_vector':
+            z = data_dic['z']
+            Tensor = torch.cuda.FloatTensor if self.cuda else torch.FloatTensor
+            z_value = Variable(Tensor(z))
+            logos = self.generator(z_value)
+            logos = logos.cpu().detach()
+            logos = get_image(logos)
+            return logos
+        if data_dic['type_prediction'] == 'random_interpolation':
+            nb_logos = data_dic['nb_logos']
+            z_values = np.random.normal(0, 1, (2, 100)) # shape (2, 100)
+            z_values = Variable(Tensor(z_values))
+            z_values = self.latent_vector_interpolation(z_values[0], z_values[1], nb_logos)
+            logos = self.generator(z_values.cuda())
+            logos = logos.cpu().detach()
+            logos = get_image(logos)
+            return logos
+        if data_dic['type_prediction'] == 'interpolation_from_vector':
+            nb_logos = data_dic['nb_logos']
+            z_values = data_dic['z'] # shape (2, 100)
+            z_values = Variable(Tensor(z_values))
+            z_values = self.latent_vector_interpolation(z_values[0], z_values[1], nb_logos)
+            logos = self.generator(z_values.cuda())
+            logos = logos.cpu().detach()
+            logos = get_image(logos)
+            return logos
+        if data_dic['type_prediction'] == 'encoding':
+            img = data_dic['img']
+            img_tensor = torch.unsqueeze(self.transformation(img), 0)
+            real_imgs = Variable(img_tensor.type(Tensor))
+            z = self.encoder(real_imgs)
+            return z.cpu().detach().numpy()

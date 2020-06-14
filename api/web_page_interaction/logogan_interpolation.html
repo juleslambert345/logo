@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Logogan interpolation</title>
+</head>
+<body>
+This page is to make interpolation bewtween two gan image as input
+
+<form action = "/logogan/interpolation" method = "POST" enctype = "multipart/form-data">
+    <label for="image1">First logo:</label>
+    <input type = "file" name = "image1" />
+    <label for="image2">Second logo:</label>
+    <input type = "file" name = "image2" />
+    <input type = "submit"/>
+</form>
+
+logo 1
+<img src="data:image/png;base64,{{ logo1  }}"\>
+
+logo 2
+<img src="data:image/png;base64,{{ logo2  }}"\>
+
+logo interpolation
+<img src="data:image/png;base64,{{ logo_interpolation  }}"\>
+</body>
+</html>

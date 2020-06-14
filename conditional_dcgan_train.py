@@ -39,15 +39,15 @@ parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rat
 parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
-parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
+parser.add_argument("--latent_dim", type=int, default=500, help="dimensionality of the latent space")
 parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
 parser.add_argument("--channels", type=int, default=3, help="number of image channels")
 parser.add_argument("--sample_interval", type=int, default=400, help="interval between image sampling")
-parser.add_argument("--experiment_name", type=str, default='conditional_gan', help="name of folder where we save the experiment")
+parser.add_argument("--experiment_name", type=str, default='conditional_ganV2', help="name of folder where we save the experiment")
 parser.add_argument("--generator_scale", type=int, default=16, help="scale of which we multiply the number of channel in the generator")
 parser.add_argument("--discriminator_scale", type=int, default=16, help="scale of which we multiply the number of channel in the discriminator")
 parser.add_argument("--encoder_scale", type=int, default=16, help="scale of which we multiply the number of channel in the discriminator")
-parser.add_argument("--nb_label", type=int, default=32, help="number of cluster labels that will be used")
+parser.add_argument("--nb_label", type=int, default=128, help="number of cluster labels that will be used")
 
 
 
@@ -169,9 +169,9 @@ def train_discriminator(real_imgs, gen_imgs, labels_vector, discriminator, adver
     fake_loss = adversarial_loss(discriminator(gen_imgs.detach(), labels_vector), fake)
     d_loss = (real_loss + fake_loss) / 2
 
-    if g_loss.item()<1.5:
-        d_loss.backward()
-        optimizer_D.step()
+
+    d_loss.backward()
+    optimizer_D.step()
     return d_loss
 
 def create_random_label(opt = opt):
@@ -283,7 +283,7 @@ if __name__ == "__main__":
             )
 
 
-    dataset_logo = LabelDataset(join('data', 'cluster'), transformation)
+    dataset_logo = LabelDataset(join('data', 'cluster_128'), transformation)
 
     dataloader = torch.utils.data.DataLoader(
         dataset_logo,

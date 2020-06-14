@@ -33,7 +33,7 @@ from torch.utils.data import Dataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_epochs", type=int, default=500, help="number of epochs of training the gan")
-parser.add_argument("--n_epochs_encoder", type=int, default=100, help="number of epochs of training the encoder")
+parser.add_argument("--n_epochs_encoder", type=int, default=200, help="number of epochs of training the encoder")
 parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
 parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
 parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
@@ -43,7 +43,7 @@ parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality 
 parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
 parser.add_argument("--channels", type=int, default=3, help="number of image channels")
 parser.add_argument("--sample_interval", type=int, default=400, help="interval between image sampling")
-parser.add_argument("--experiment_name", type=str, default='cluster5V3', help="name of folder where we save the experiment")
+parser.add_argument("--experiment_name", type=str, default='cluster5V6', help="name of folder where we save the experiment")
 parser.add_argument("--generator_scale", type=int, default=16, help="scale of which we multiply the number of channel in the generator")
 parser.add_argument("--discriminator_scale", type=int, default=16, help="scale of which we multiply the number of channel in the discriminator")
 parser.add_argument("--encoder_scale", type=int, default=16, help="scale of which we multiply the number of channel in the discriminator")
@@ -169,9 +169,9 @@ def train_discriminator(real_imgs, gen_imgs, discriminator, adversarial_loss, op
     fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
     d_loss = (real_loss + fake_loss) / 2
 
-    if g_loss.item()<1.5:
-        d_loss.backward()
-        optimizer_D.step()
+
+    d_loss.backward()
+    optimizer_D.step()
     return d_loss
 
 def create_interpolation(nb_logo, generator):
@@ -262,9 +262,6 @@ if __name__ == "__main__":
     transformation = transforms.Compose(
                 [transforms.RandomHorizontalFlip(),
                  transforms.RandomGrayscale(p=0.01),
-                 transforms.RandomApply([transforms.Pad(3, fill=255)], p=0.1),
-                 transforms.RandomRotation((1, 359), fill =255),
-                 transforms.RandomPerspective(p=0.01, fill =255),
                  GaussianBlur(2),
                  transforms.Resize(opt.img_size),
                  transforms.ToTensor(),

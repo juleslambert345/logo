@@ -8,7 +8,7 @@ from torch.autograd import Variable
 from torchvision.utils import save_image
 
 
-path = join('experiments_result', '2020_06_08__09_25_cluster5V3', 'artifacts')
+path = join('experiments_result', '2020_06_13__06_01_cluster5V4', 'artifacts')
 
 
 cuda = True if torch.cuda.is_available() else False

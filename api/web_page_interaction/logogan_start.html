@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Logo start</title>
+</head>
+<body>
+This is to create a logo from begining from an initial idea.
+<form action = "/logogan/starting" method = "POST" enctype = "multipart/form-data">
+    <label for="image1">Starting logo:</label>
+    <input type = "file" name = "logo_input" />
+    <label for="image2">Difference (0 : mean exactly the same):</label>
+    <input type = "text" name = "distance" />
+    <input type = "submit"/>
+</form>
+logo from input
+<img src="data:image/png;base64,{{ logo_input  }}"\>
+logo output
+<img src="data:image/png;base64,{{ logo_output  }}"\>
+</body>
+</html>

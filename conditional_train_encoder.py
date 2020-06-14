@@ -19,8 +19,8 @@ def get_dataloader(opt, label_encoder):
         [transforms.Resize(opt.img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
     )
 
-    train_logo = LabelDataset(join('data', 'cluster'), transformation, split = 'train', encoder = label_encoder)
-    valid_logo = LabelDataset(join('data', 'cluster'), transformation, split = 'valid', encoder = label_encoder)
+    train_logo = LabelDataset(join('data', 'cluster_128'), transformation, split = 'train', encoder = label_encoder)
+    valid_logo = LabelDataset(join('data', 'cluster_128'), transformation, split = 'valid', encoder = label_encoder)
 
     train_dataloader = torch.utils.data.DataLoader(
             train_logo,
