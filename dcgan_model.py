@@ -211,7 +211,9 @@ class GeneratorWrapper(mlflow.pyfunc.PythonModel):
             z_values = np.random.normal(0, 1, (2, 100)) # shape (2, 100)
             z_values = Variable(Tensor(z_values))
             z_values = self.latent_vector_interpolation(z_values[0], z_values[1], nb_logos)
-            logos = self.generator(z_values.cuda())
+            if self.cuda:
+                z_values = z_values.cuda()
+            logos = self.generator(z_values)
             logos = logos.cpu().detach()
             logos = get_image(logos)
             return logos
@@ -220,7 +222,9 @@ class GeneratorWrapper(mlflow.pyfunc.PythonModel):
             z_values = data_dic['z'] # shape (2, 100)
             z_values = Variable(Tensor(z_values))
             z_values = self.latent_vector_interpolation(z_values[0], z_values[1], nb_logos)
-            logos = self.generator(z_values.cuda())
+            if self.cuda:
+                z_values = z_values.cuda()
+            logos = self.generator(z_values)
             logos = logos.cpu().detach()
             logos = get_image(logos)
             return logos

@@ -43,6 +43,8 @@ RUN /bin/bash -c "source activate mlflow-env" && \
 
 COPY start.sh /root
 
+EXPOSE 5000
+
 # Make our start script executable
 RUN ["chmod", "+x", "/root/start.sh"]
 

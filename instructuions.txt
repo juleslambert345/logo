@@ -24,6 +24,11 @@ Push the image
 docker push juleslambert345/logogan:logo_api_v2
 
 
+access the aws instance
+---
+ssh -i key.pem ubuntu@ip_adress
+
+
 To run the container on the cloud after having pull image
 ---
 docker run -it --name logo_cont -p 5000:5000 --rm juleslambert345/logogan:logo_api_v1
